@@ -1,0 +1,253 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{float}
+\geometry{a4paper, margin=2.5cm}
+
+\title{数值分析——线性方程组求解上机报告}
+\author{物理52~邓昀凯}
+\date{2026年9月21日}
+
+\begin{document}
+\maketitle
+
+\section{实验目的}
+
+本次上机作业用直接法和迭代法求解线性方程组 $Ax=b$，所处理的对象是
+Hilbert 矩阵
+\[
+H_n = \left(\frac{1}{i+j+1}\right)_{i,j=0}^{n-1},\quad n=10,11,\dots,15,
+\]
+取真解 $x^*=(1,1,\dots,1)^T$，右端项由 $b=H_n x^*$ 得到。
+
+Hilbert 矩阵是数值分析中经典的病态矩阵，其条件数随 $n$ 增长近似按
+$\kappa(H_n)\sim e^{3.5n}$ 的速度增大。到 $n=15$ 时，条件数已在 $10^{22}$
+量级，早已超过双精度浮点数的有效位数。我们正是想利用这一点，观察不同
+方法在病态问题上的表现差异。
+
+用到的方法包括：Gauss 消元法、Cholesky 分解法、Tikhonov 正则化
+（分别用 Gauss 消元和 Cholesky 分解求解）、共轭梯度法（CG）以及
+GMRES。因此共有六种结果参与比较。实验期望：
+
+\begin{itemize}
+  \item 比较直接法与迭代法在病态问题上的精度、稳定性；
+  \item 观察条件数增大时各方法误差的增长趋势；
+  \item 通过误差度量而非仅仅残差大小来判断解的好坏。
+\end{itemize}
+
+\section{实验方法详述}
+
+\subsection{误差度量}
+
+对每一种方法得到的近似解 $x$，我们与真解 $x^*$ 比较，计算以下几个量：
+\[
+\|x-x^*\|_\infty=\max_i |x_i-x_i^*|,\qquad
+\|x-x^*\|_2=\sqrt{\sum_i (x_i-x_i^*)^2},
+\]
+\[
+\text{rel\_err}=\frac{\|x-x^*\|_2}{\|x^*\|_2},\qquad
+\|r\|_\infty=\max_i |b_i-(Ax)_i|.
+\]
+特别说明一点：由于 $\kappa(H_n)$ 极大，即使残差 $\|r\|_\infty$ 小到 $10^{-16}$，
+误差仍可能达到 $O(1)$。因此仅看残差是不够的，必须与真解比较。
+
+\subsection{Gauss 消元法}
+
+采用列主元 Gauss 消元。对 $k=0,1,\dots,n-2$，先在 $A[k:n,k]$ 中选主元，
+交换到第 $k$ 行，然后对 $i>k$ 执行消元：
+\[
+\lambda_{ik}=\frac{a_{ik}}{a_{kk}},\quad
+a_{ij}\leftarrow a_{ij}-\lambda_{ik}a_{kj},\quad
+b_i\leftarrow b_i-\lambda_{ik}b_k.
+\]
+最后回代求解上三角方程组。
+
+\subsection{Cholesky 分解法}
+
+Hilbert 矩阵对称正定，可做 $A=LDL^T$ 分解，其中 $L$ 为单位下三角矩阵，
+$D$ 为对角矩阵。逐列计算
+\[
+t_j = a_{ij}-\sum_{k<j}t_k L_{jk},\quad
+L_{ij}=\frac{t_j}{d_j},\quad
+d_i = a_{ii}-\sum_{k<i}t_k L_{ik}.
+\]
+分解后先用前代解 $Ly=b$，再对 $DL^Tx=y$ 回代求解。
+
+\subsection{Tikhonov 正则化}
+
+将原方程转化为
+\[
+(A^TA+\alpha I)x=A^Tb,
+\]
+本实验中取 $\alpha=10^{-12}$。矩阵 $A^TA+\alpha I$ 是对称正定的，因此
+既可以用 Cholesky 分解求解，也可以用 Gauss 消元法求解。本实验分别用
+这两种方法求解该正则化系统，并记为 \texttt{Gauss+Reg} 和
+\texttt{Cholesky+Reg}，以比较不同直接法在正则化框架下的表现。
+正则化的目的是抑制病态矩阵对小扰动的放大。
+
+\subsection{共轭梯度法 CG}
+
+CG 适用于对称正定矩阵，利用 $A$-共轭方向迭代。给定初值 $x_0=0$，
+$r_0=b-Ax_0$，$p_0=r_0$，迭代格式为
+\[
+\alpha_k=\frac{r_k^Tr_k}{p_k^TAp_k},\quad
+x_{k+1}=x_k+\alpha_k p_k,\quad
+r_{k+1}=r_k-\alpha_k Ap_k,
+\]
+\[
+\beta_k=\frac{r_{k+1}^Tr_{k+1}}{r_k^Tr_k},\quad
+p_{k+1}=r_{k+1}+\beta_k p_k.
+\]
+本实验取 $\text{tol}=10^{-10}$，最大迭代次数 $10000$。
+
+\subsection{GMRES 方法}
+
+GMRES 适用于一般非奇异矩阵，在 Krylov 子空间
+$x_0+K_m(A,r_0)$ 中最小化残差的 2-范数。用 Arnoldi 过程构造正交基
+$v_1,\dots,v_{m+1}$，得到 $AV_m=V_{m+1}\bar H_m$，再解最小二乘问题
+\[
+\min_{y}\|\beta e_1-\bar H_m y\|_2.
+\]
+本实验中不重启，最大步数取 $n$，容差同样是 $10^{-10}$。
+
+\section{实验结果讨论}
+
+下面所有数据由程序 \texttt{linear\_equation.py} 直接输出，
+汇总表见 \texttt{linear\_equation\_results.txt}。表中以 $x_i$ 代表第 $i$
+个小方法得到的结果，误差列以无穷范数 $\|x-x^*\|_\infty$ 为主。
+因为范数结果已经体现误差上界，简便起见，就不再罗列具体解的数值。
+
+\subsection{各方法的误差对比}
+
+表~\ref{tab:err} 给出了六种方法在不同 $n$ 下的无穷范数误差。
+
+\begin{table}[H]
+\centering
+\small
+\caption{各方法无穷范数误差 $\|x-x^*\|_\infty$}
+\label{tab:err}
+\begin{tabular}{c|cccccc}
+\toprule
+$n$ & Gauss & Cholesky & Gauss+Reg & Cholesky+Reg & CG & GMRES \\
+\midrule
+10 & $7.18\times 10^{-4}$ & $7.29\times 10^{-4}$ & $7.80\times 10^{-4}$ & $7.90\times 10^{-4}$ & $8.77\times 10^{-5}$ & $8.77\times 10^{-5}$ \\
+11 & $2.19\times 10^{-3}$ & $2.76\times 10^{-3}$ & $9.61\times 10^{-4}$ & $9.39\times 10^{-4}$ & $1.24\times 10^{-4}$ & $1.24\times 10^{-4}$ \\
+12 & $5.95\times 10^{-3}$ & $2.20\times 10^{-1}$ & $1.07\times 10^{-3}$ & $1.11\times 10^{-3}$ & $1.58\times 10^{-4}$ & $1.58\times 10^{-4}$ \\
+13 & $2.20\times 10^{0}$  & $6.79\times 10^{0}$  & $1.16\times 10^{-3}$ & $1.15\times 10^{-3}$ & $2.27\times 10^{-4}$ & $2.27\times 10^{-4}$ \\
+14 & $6.26\times 10^{0}$  & $9.79\times 10^{0}$  & $1.07\times 10^{-3}$ & $1.07\times 10^{-3}$ & $3.07\times 10^{-4}$ & $3.06\times 10^{-4}$ \\
+15 & $7.78\times 10^{0}$  & $3.04\times 10^{0}$  & $8.89\times 10^{-4}$ & $9.12\times 10^{-4}$ & $3.93\times 10^{-4}$ & $3.93\times 10^{-4}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+从表中能看出一个很明显的分界点。$n\le 11$ 时，直接法（Gauss 和
+Cholesky）的误差都还在 $10^{-3}$ 以下；$n=12$ 时 Cholesky 已经跳到
+$2.20\times 10^{-1}$，而 Gauss 尚可；$n\ge 13$ 之后，Gauss 和 Cholesky
+的误差一下子跳到了 $O(1)$ 甚至更大，$n=14$ 时 Gauss 达到了 $6.26$，
+$n=15$ 时 Cholesky 达到了 $3.04$。这说明直接法在严重病态问题上是
+彻底失效的。
+
+反过来看 Gauss+Reg、Cholesky+Reg、CG 和 GMRES 四种方法，误差一直
+保持在 $10^{-3}$ 到 $10^{-4}$ 量级，随 $n$ 增大几乎没有明显恶化。
+其中两种正则化方法的误差非常接近，说明用 Gauss 还是 Cholesky 去解
+正则化系统，对最终精度影响不大，因为正则化本身已经把条件数压了下来。
+
+\subsection{残差与误差的错位}
+
+表~\ref{tab:res} 列出了残差的无穷范数。
+
+\begin{table}[H]
+\centering
+\small
+\caption{各方法残差 $\|r\|_\infty$}
+\label{tab:res}
+\begin{tabular}{c|cccccc}
+\toprule
+$n$ & Gauss & Cholesky & Gauss+Reg & Cholesky+Reg & CG & GMRES \\
+\midrule
+10 & $2.22\times 10^{-16}$ & $0$ & $8.40\times 10^{-10}$ & $8.37\times 10^{-10}$ & $1.50\times 10^{-12}$ & $1.96\times 10^{-13}$ \\
+12 & $4.44\times 10^{-16}$ & $4.44\times 10^{-16}$ & $8.78\times 10^{-10}$ & $8.86\times 10^{-10}$ & $3.58\times 10^{-12}$ & $1.93\times 10^{-12}$ \\
+13 & $4.44\times 10^{-16}$ & $4.44\times 10^{-16}$ & $1.03\times 10^{-9}$ & $1.02\times 10^{-9}$ & $4.95\times 10^{-12}$ & $5.18\times 10^{-12}$ \\
+15 & $4.44\times 10^{-16}$ & $4.44\times 10^{-16}$ & $1.27\times 10^{-9}$ & $1.28\times 10^{-9}$ & $2.95\times 10^{-11}$ & $2.46\times 10^{-11}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+这张表非常说明问题。$n=15$ 时 Gauss 的残差是 $4.44\times 10^{-16}$，
+看起来完美，但误差却是 $7.78$。原因是 Hilbert 矩阵本身病态到
+$\|H_{15}^{-1}\|$ 是 $10^{22}$ 量级，$10^{-16}$ 的残差在解上被放大了
+$10^{22}$ 倍，误差自然就变成 $O(1)$。这提醒我们：对病态问题，
+\textbf{残差小不等于误差小}，判断解的好坏必须以误差为准。
+
+\subsection{迭代法与正则化方法的收敛表现}
+
+CG 和 GMRES 的误差在所有 $n$ 下都稳定在 $10^{-4}$ 量级，而且两者的
+结果几乎完全一致，这是可以预料的：Hilbert 矩阵对称正定，GMRES 在
+对称正定情形下与 CG 的最优性条件等价（$A$-范数最小和残差 2-范数最小
+在 Krylov 子空间上给出相同的投影）。
+
+Tikhonov 正则化也保持了稳定，原因是加了 $\alpha I$ 之后，矩阵的最小
+奇异值被抬到了 $\sqrt{\alpha}=10^{-6}$ 量级，条件数被压到
+$10^{6}$ 左右，抵消了 Hilbert 矩阵病态带来的放大。代价是解会带有
+正则化偏差，误差始终停留在 $10^{-3}$ 而难以继续下降。两种实现
+（Gauss+Reg 和 Cholesky+Reg）的误差曲线几乎重合，说明正则化之后
+直接法的选择对精度不再敏感。
+
+\subsection{耗时对比}
+
+表~\ref{tab:time} 是各方法的运行时间。由于 $n$ 都小于 16，量级上差别
+不大，但趋势已经能看出来。
+
+\begin{table}[H]
+\centering
+\small
+\caption{各方法运行时间（秒）}
+\label{tab:time}
+\begin{tabular}{c|cccccc}
+\toprule
+$n$ & Gauss & Cholesky & Gauss+Reg & Cholesky+Reg & CG & GMRES \\
+\midrule
+10 & 0.000072 & 0.000047 & 0.000157 & 0.000133 & 0.000252 & 0.000311 \\
+12 & 0.000090 & 0.000055 & 0.000235 & 0.000193 & 0.000295 & 0.000310 \\
+15 & 0.000147 & 0.000119 & 0.000415 & 0.000352 & 0.000377 & 0.000398 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+在 $n$ 很小时，Cholesky 最快（大约是 Gauss 的 $2/3$），两种正则化方法
+因为要额外构造 $A^TA$，耗时大约是 Cholesky 的 $3$ 倍；其中
+Cholesky+Reg 通常比 Gauss+Reg 略快，这符合 Cholesky 利用对称正定性的
+优势。CG 和 GMRES 每步都要做矩阵-向量乘法，固定步数下比直接法慢一点。
+当 $n$ 继续增大后，直接法是 $O(n^3)$，迭代法每步 $O(n^2)$ 且通常可以
+在远小于 $n$ 的步数内收敛，优势会体现出来。
+
+\section{实验总结}
+
+这次实验最大的收获，是看到了病态矩阵对直接法的毁灭性影响。
+Hilbert 矩阵在 $n=13$ 时条件数已经超过 $10^{19}$，Gauss 和 Cholesky
+即使残差达到机器精度 $10^{-16}$，误差仍然是 $O(1)$。相比之下，
+迭代法（CG、GMRES）和正则化方法在同样的问题上表现出更好的稳定性。
+
+具体来说：
+
+\begin{enumerate}
+  \item 对良态或轻微病态问题（$n\le 11$），直接法精度最高、实现最简单，
+        是首选；
+  \item 对严重病态问题，直接法已经不可靠，必须依赖正则化或迭代法；
+  \item 残差小不能作为解正确的依据，必须结合条件数估计和误差度量。
+\end{enumerate}
+
+从这次结果看，Tikhonov 正则化的稳定性最好，但精度受参数 $\alpha$ 限制，可能需要多次实验进行选取（让人想起训练AI时痛苦的调参过程）；
+用 Gauss 还是 Cholesky 解正则化系统，对最终精度影响很小，但
+Cholesky+Reg 通常略快。CG 和 GMRES 在精度上更优，但仍就需要选取合适的迭代次数和收敛判据。
+
+这是我做的第一次数值分析实验，也让我真切感受到理论推导和现实应用之间的距离。物理上三体问题是由确定的微分方程决定，但初值敏感却使其难以预测。这便是数值分析的神秘之处吧……
+
+
+
+
+注：本次实验一些思路的参考、部分代码的实现、部分论文格式和公式的排版、论文数据的誊写借助了AI工具，以减少不必要的机械性劳动。
+
+\end{document}
