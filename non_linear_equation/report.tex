@@ -1,0 +1,124 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{float}
+\geometry{a4paper, margin=2.5cm}
+
+\title{数值分析——非线性方程求根上机报告}
+\author{物理52~邓昀凯}
+\date{2026年10月19日}
+
+\begin{document}
+\maketitle
+
+\section{实验目的}
+
+用五种方法求方程
+\[
+f(x)=x^{3}+2x^{2}+10x-20=0
+\]
+在 $x_0=1$ 附近的根。准确解为 $x^*=1.368808107\cdots$，要求精度达到
+$10^{-7}$。所用方法为：
+
+\begin{enumerate}
+  \item 直接迭代 $x_{k+1}=\dfrac{20-2x_k^2-x_k^3}{10}$；
+  \item 直接迭代 $x_{k+1}=\sqrt[3]{20-10x_k-2x_k^2}$；
+  \item 方法 (1) 的 Steffensen 加速；
+  \item 方法 (2) 的 Steffensen 加速；
+  \item Newton 法。
+\end{enumerate}
+
+\section{实验方法}
+
+\subsection{停止条件与死循环防护}
+
+相邻两次迭代差小于 $\text{tol}=10^{-8}$ 即停止。为防死循环，各方法均设
+最大迭代次数，并对非有限值、发散、Steffensen 分母过小等情况提前退出。
+
+\subsection{Steffensen 加速}
+
+对迭代函数 $\varphi(x)$，Steffensen 加速格式为
+\[
+x_{k+1}=x_k-\frac{(\varphi(x_k)-x_k)^2}
+{\varphi(\varphi(x_k))-2\varphi(x_k)+x_k}.
+\]
+
+\subsection{Newton 法}
+
+迭代格式为
+\[
+x_{k+1}=x_k-\frac{f(x_k)}{f'(x_k)},\qquad
+f'(x)=3x^2+4x+10.
+\]
+
+\section{实验结果}
+
+各方法结果汇总于表~\ref{tab:res}。误差指 $|x-x^*|$。
+
+\begin{table}[H]
+\centering
+\small
+\caption{五种方法的求根结果（$x_0=1$，$\text{tol}=10^{-8}$）}
+\label{tab:res}
+\begin{tabular}{clccc}
+\toprule
+序号 & 方法 & 近似根 $x$ & 迭代次数 & 误差 \\
+\midrule
+(1) & 直接迭代 (1) & $0.548946478$ & 1000 & $8.20\times10^{-1}$ \\
+(2) & 直接迭代 (2) & $-3.162277660$ & 1000 & $4.53\times10^{0}$ \\
+(3) & Steffensen (1) & $1.368808107821$ & 5 & $8.21\times10^{-10}$ \\
+(4) & Steffensen (2) & $1.368808107821$ & 8 & $8.21\times10^{-10}$ \\
+(5) & Newton 法 & $1.368808107821$ & 5 & $8.21\times10^{-10}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+其中方法 (1)、(2) 达到最大迭代次数仍未收敛；方法 (3) 因 Steffensen
+分母过小提前退出，但此时已满足精度；方法 (4)、(5) 正常收敛。
+
+\section{结果讨论}
+
+\subsection{直接迭代的失效}
+
+方法 (1)、(2) 在根附近均不收敛。原因是它们的迭代函数在 $x^*$ 处的
+导数绝对值大于 1：
+\[
+|\varphi_1'(x^*)|=\left|\frac{-4x^*-3x^{*2}}{10}\right|\approx 1.11>1,
+\qquad
+|\varphi_2'(x^*)|>1.
+\]
+不动点迭代的局部收敛条件不满足，迭代点被推离根，最终在别处振荡或发散，
+1000 次后误差仍在 $O(1)$ 量级。
+
+\subsection{Steffensen 与 Newton 的高效性}
+
+方法 (3)、(4)、(5) 都在 10 次以内收敛到 $10^{-9}$ 量级误差，远超
+$10^{-7}$ 的要求。Steffensen 加速把原本发散的不动点迭代转化为近似二阶
+收敛的方法；Newton 法本身是二阶收敛，5 次迭代即达到机器精度附近的误差。
+
+方法 (3) 报出“Steffensen 分母过小”，这是在已经收敛到 $10^{-14}$ 量级
+残差后分母接近零所致，属于数值上的正常现象，并非方法失败。
+
+\subsection{精度与效率的比较}
+
+Newton 法迭代次数最少（5 次），且不需要额外选择加速参数，是本问题中
+最经济的方法。两种 Steffensen 方法迭代次数分别为 5 和 8，也明显优于
+直接迭代。值得注意的是，直接迭代 (1) 虽然发散，但其 Steffensen 加速
+版本反而最快，说明加速方法对迭代函数的选取并不十分敏感。
+
+\section{实验总结}
+
+本次实验得到以下结论：
+
+\begin{enumerate}
+  \item 不动点迭代是否收敛取决于迭代函数在根处的导数，导数绝对值大于 1
+        时直接迭代不可用；
+  \item Steffensen 加速能显著改善甚至挽救原本发散的迭代；
+  \item Newton 法收敛快、实现简单，是求解单变量非线性方程的首选；
+  \item 实际编程中应设置最大迭代次数和发散检测，避免死循环。
+\end{enumerate}
+
+注：本次实验部分代码实现与报告排版借助了 AI 工具。
+
+\end{document}
